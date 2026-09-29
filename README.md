@@ -61,7 +61,7 @@ down, and why port changes and L3 tunnels do not fix it.
 
 ```bash
 # 1. one secret per deployment, never commit it
-openssl rand -hex 24
+openssl rand -hex 32
 
 # 2. public host
 muse-proxy-server -secret <secret> -tcp 127.0.0.1:2222 -http 127.0.0.1:18080
@@ -93,7 +93,17 @@ go install github.com/tidyinfo/muse-proxy/cmd/muse-proxy-server@latest
 go install github.com/tidyinfo/muse-proxy/cmd/muse-proxy-client@latest
 ```
 
-**Container** — the server only:
+**Container** — the server only. The fastest route if you already run a VPS:
+
+```bash
+cp deploy/server.env.example server.env   # edit: paste a generated secret
+chmod 600 server.env
+docker compose up -d
+```
+
+`docker-compose.yml` binds both published ports to loopback and expects an
+nginx (or Caddy) in front for TLS — see `deploy/nginx/muse-proxy.conf`.
+Without a reverse proxy:
 
 ```bash
 docker run --rm -p 127.0.0.1:2222:2222 -p 127.0.0.1:18080:18080 \
@@ -113,8 +123,11 @@ binary came from rather than taking the release page's word for it. The exact
 
 ## Security model (summary)
 
-- The secret is a bearer token in the URL path: treat it like a password,
-  never commit it, rotate on suspicion.
+- The secret is a bearer token and the *only* thing authenticating either
+  end. It may travel in the URL path (default) or as `Authorization: Bearer`
+  (`-secret-file` on the client); the server accepts either. Treat it like a
+  password, never commit it, rotate on suspicion. Full comparison in
+  [`docs/SECURITY.md`](docs/SECURITY.md).
 - The client allowlists forwarding targets — it can never be steered into
   becoming an open proxy.
 - The server should listen on loopback only; expose further access via your

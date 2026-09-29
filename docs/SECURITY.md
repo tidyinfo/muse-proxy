@@ -16,18 +16,58 @@ it. The threat model follows from that shape.
 
 ## The secret
 
-- The `<secret>` in `/fwd/<secret>` is a **bearer token**: anyone holding it
-  can impersonate the client and receive forwarded streams.
-- Generate with `openssl rand -hex 24`. Never commit it, never log it.
-- The secret appears in the request path: **disable access logging** for the
-  `/fwd/` location (see `deploy/nginx/muse-proxy.conf`).
-- Compare secrets in constant time (the server does).
+- The secret is a **bearer token**: anyone holding it can impersonate the
+  client and receive forwarded streams. There is nothing else authenticating
+  either end.
+- Generate with `openssl rand -hex 32`. Never commit it, never log it.
+- Compare secrets in constant time (the server does, for both carriers).
 - Rotate on suspicion: change the secret server-side and in the client's
   url-file, then restart both. During rotation, invalidate the old secret
   first: with two valid secrets in flight, either one opens the tunnel, so
   the compromised value stays live until both ends agree on the new one.
   Keep a short overlap window only if you must avoid downtime, and log the
   cutover.
+
+### Two carriers, either is sufficient
+
+The server accepts the secret in **either** place, and does not care which
+one arrives:
+
+| Carrier | Client | Where it leaks |
+|---|---|---|
+| URL path — `wss://host/fwd/<secret>` | default | reverse-proxy access logs, any `Referer`, browser history |
+| `Authorization: Bearer <secret>` | `-secret-file` | essentially nowhere; it is a header, not a URL |
+
+Either one matching opens the tunnel, and both comparisons always run. There
+is no precedence: if you use the header form, whatever the path segment
+happens to be is ignored.
+
+**Which to use.** The path form is the default because a reverse proxy can
+switch access logging off per-location without inspecting a single header —
+one line of nginx, no log parser, no risk of missing a field. That is a real
+operational advantage and it is why the path is not going away.
+
+Use the header form when your reverse proxy cannot be configured that way, or
+when you would simply rather the secret never be part of a URL:
+
+```bash
+# client: FWD_URL without the secret, plus a FWD_SECRET= line
+#   in the file passed to -url-file
+FWD_URL=wss://host/fwd/
+FWD_SECRET=8f14e45fceea167a5a36dedd4bea2543
+muse-proxy-client -url-file /etc/muse-proxy/fwd.env
+```
+
+If you use the path form, **disable access logging for the `/fwd/` and
+`/shell/` locations** (see `deploy/nginx/muse-proxy.conf`, which also scrubs
+the request URI for the error log). TLS does not help here: the point at
+which the path is written to a log is usually *after* termination.
+
+The browser web shell always uses the path form. That is not a leak: the
+page builds the WebSocket URL in JavaScript from a value the operator just
+typed, so the secret never reaches a navigation, a history entry, or a
+`Referer` header. It is still subject to access logging, so the same nginx
+rule applies.
 
 ## Client hardening
 

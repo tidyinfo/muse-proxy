@@ -36,6 +36,12 @@ type Config struct {
 	DialTimeout time.Duration
 	// DisableShell refuses OPEN_SHELL requests (no pty sessions).
 	DisableShell bool
+	// Secret, when set, is sent as `Authorization: Bearer` instead of being
+	// part of URL. The path form is the default because a reverse proxy can
+	// turn access logging off per-location without inspecting headers; the
+	// header form exists for operators who would rather the secret never
+	// appear in a URL at all. Both are accepted by the server.
+	Secret string
 }
 
 func (c Config) withDefaults() Config {
@@ -280,7 +286,13 @@ func (f *forwarder) serve(pingInterval time.Duration) error {
 
 func dial(cfg Config) (*websocket.Conn, error) {
 	d := websocket.Dialer{HandshakeTimeout: 20 * time.Second, Proxy: cfg.Proxy}
-	c, _, err := d.Dial(cfg.URL, nil)
+	// Built per dial, never shared: a reconnect must not reuse a header map a
+	// previous handshake touched, and the secret must not outlive this call.
+	var hdr http.Header
+	if cfg.Secret != "" {
+		hdr = http.Header{"Authorization": {"Bearer " + cfg.Secret}}
+	}
+	c, _, err := d.Dial(cfg.URL, hdr)
 	return c, err
 }
 

@@ -2,10 +2,27 @@
 
 ## Server (public host)
 
+The short way, if the host already runs containers:
+
+```bash
+git clone https://github.com/tidyinfo/muse-proxy && cd muse-proxy
+cp deploy/server.env.example server.env
+sed -i "s/PASTE_GENERATED_SECRET_HERE/$(openssl rand -hex 32)/" server.env
+chmod 600 server.env
+docker compose up -d
+```
+
+`docker-compose.yml` publishes both ports on loopback and reads the secret
+from a read-only file mount rather than an environment variable. Steps 4 and
+5 below still apply: TLS termination and the reachability of `:2222` are
+yours to arrange, and the container does not do them for you.
+
+By hand:
+
 1. Build: `make build` → `bin/muse-proxy-server`.
 2. Create the secret file (owner-only):
    ```bash
-   openssl rand -hex 24 > /etc/muse-proxy/secret
+   openssl rand -hex 32 > /etc/muse-proxy/secret
    chmod 600 /etc/muse-proxy/secret
    ```
    The file may contain either the raw secret or a `FWD_SECRET=<secret>` line.
@@ -29,10 +46,18 @@
    printf 'FWD_URL=wss://example.com/fwd/<secret>\n' > /etc/muse-proxy/fwd.env
    chmod 600 /etc/muse-proxy/fwd.env
    ```
+   To keep the secret out of the URL entirely, drop it from `FWD_URL` and add
+   a `FWD_SECRET=` line instead — the server accepts either, and the client
+   sends it as `Authorization: Bearer` (see [`SECURITY.md`](SECURITY.md)):
+   ```bash
+   printf 'FWD_URL=wss://example.com/fwd/\nFWD_SECRET=<secret>\n' > /etc/muse-proxy/fwd.env
+   ```
 3. Install `deploy/systemd/muse-proxy-client.service`, or run directly:
    ```bash
    muse-proxy-client -url-file /etc/muse-proxy/fwd.env -allow 127.0.0.1:22
    ```
+   Add `-secret-file /etc/muse-proxy/fwd.env` when using the `FWD_SECRET=`
+   form above.
 4. The client honors `HTTPS_PROXY`/`https_proxy`/`NO_PROXY` for the
    outbound WebSocket (`CONNECT`).
 

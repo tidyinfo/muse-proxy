@@ -38,6 +38,79 @@ func TestSecretRejected(t *testing.T) {
 	ws.Close()
 }
 
+func TestSecretViaAuthorizationHeader(t *testing.T) {
+	s, err := New(Config{Secret: "correct-secret", ListenAddr: "127.0.0.1:0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	base := "ws" + strings.TrimPrefix(ts.URL, "http")
+
+	hdr := func(tok string) http.Header {
+		return http.Header{"Authorization": {"Bearer " + tok}}
+	}
+
+	// A bare path plus a correct header is the documented "keep the secret
+	// out of the URL" configuration and must upgrade.
+	ws, _, err := websocket.DefaultDialer.Dial(base+"/fwd/", hdr("correct-secret"))
+	if err != nil {
+		t.Fatalf("bearer dial with correct secret: %v", err)
+	}
+	ws.Close()
+
+	// Either carrier is sufficient, so a correct header upgrades even when
+	// the path carries something else. This is the documented rule, not an
+	// accident: an operator using the header form must not have to care what
+	// the path segment happens to be.
+	ws, _, err = websocket.DefaultDialer.Dial(base+"/fwd/leftover", hdr("correct-secret"))
+	if err != nil {
+		t.Fatalf("right header should win over a stale path: %v", err)
+	}
+	ws.Close()
+
+	// The header must not become a way to smuggle a wrong value past a
+	// correct-looking path, or vice versa.
+	for _, tc := range []struct {
+		name, path, tok string
+	}{
+		{"wrong header, bare path", "/fwd/", "wrong"},
+		{"wrong header, wrong path", "/fwd/wrong", "wrong"},
+		{"no header, wrong path", "/fwd/wrong", ""},
+		{"empty bearer", "/fwd/", ""},
+	} {
+		var h http.Header
+		if tc.tok != "" {
+			h = hdr(tc.tok)
+		}
+		if _, _, err := websocket.DefaultDialer.Dial(base+tc.path, h); err == nil {
+			t.Fatalf("%s: should have been rejected", tc.name)
+		}
+	}
+
+	// The shell path honours the header too; the browser still uses the
+	// path form, but an operator fronting it with a proxy may not.
+	if _, _, err := websocket.DefaultDialer.Dial(base+"/shell/ws/", hdr("correct-secret")); err != nil {
+		t.Fatalf("bearer dial to shell ws: %v", err)
+	}
+}
+
+// TestBearerSchemeCaseInsensitive pins the scheme match: the scheme is
+// case-insensitive per RFC 7235, so `bearer` must work exactly like `Bearer`.
+func TestBearerSchemeCaseInsensitive(t *testing.T) {
+	r := httptest.NewRequest("GET", "/fwd/", nil)
+	r.Header.Set("Authorization", "bearer tok")
+	if got := bearer(r); got != "tok" {
+		t.Fatalf("bearer() = %q, want %q", got, "tok")
+	}
+	for _, bad := range []string{"Basic tok", "Bearer", "Bearer ", "Token tok", "tok"} {
+		r.Header.Set("Authorization", bad)
+		if got := bearer(r); got != "" {
+			t.Errorf("bearer(%q) = %q, want empty", bad, got)
+		}
+	}
+}
+
 func TestNewValidation(t *testing.T) {
 	if _, err := New(Config{ListenAddr: "127.0.0.1:0"}); err == nil {
 		t.Fatal("expected error for empty secret")

@@ -261,3 +261,35 @@ func TestOpenDataOrdering(t *testing.T) {
 		t.Fatal("DATA sent immediately after OPEN never reached the target (dropped)")
 	}
 }
+
+// TestDialSendsBearerHeader pins the wire side of the header form: with
+// Config.Secret set the Authorization header must be present on every dial
+// (including reconnects, which go through this same function), and with it
+// unset no header may be sent at all.
+func TestDialSendsBearerHeader(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("Authorization"))
+		upgrade(t, w, r).Close()
+	}))
+	defer srv.Close()
+	u := wsTestURL(srv)
+
+	if c, err := dial(Config{URL: u, Proxy: noProxy}); err != nil {
+		t.Fatalf("dial without secret: %v", err)
+	} else {
+		c.Close()
+	}
+	if got[0] != "" {
+		t.Fatalf("no secret configured but header was %q", got[0])
+	}
+
+	if c, err := dial(Config{URL: u, Proxy: noProxy, Secret: "s3cret"}); err != nil {
+		t.Fatalf("dial with secret: %v", err)
+	} else {
+		c.Close()
+	}
+	if got[1] != "Bearer s3cret" {
+		t.Fatalf("header = %q, want %q", got[1], "Bearer s3cret")
+	}
+}

@@ -1,0 +1,57 @@
+# Server side only -- the client is a single binary that runs on the
+# egress-restricted host and has no container story worth having.
+#
+#   cp deploy/server.env.example server.env   # then edit it
+#   docker compose up -d
+#
+# Both published ports are loopback-bound on purpose. This container speaks
+# plaintext HTTP and plaintext TCP, so something that terminates TLS has to
+# sit in front of it; see deploy/nginx/muse-proxy.conf. Publishing on
+# 0.0.0.0 would put the WebSocket handshake and every forwarded byte on the
+# wire in the clear, and would also expose an authenticated-with-only-a-
+# secret TCP port directly to the internet.
+#
+# Image: ghcr.io/tidyinfo/muse-proxy, built by the release workflow. To run
+# straight from this tree instead, build the binary first and swap `image:`
+# for a `build:` section pointing at Dockerfile.release.
+
+services:
+  muse-proxy-server:
+    image: ghcr.io/tidyinfo/muse-proxy:latest
+    # The image's own CMD already sets -http and -tcp; they are repeated
+    # here so the effective configuration is readable without opening the
+    # Dockerfile.
+    command:
+      - -secret-file
+      - /run/secrets/muse-proxy.env
+      - -http
+      - 127.0.0.1:18080
+      - -tcp
+      - 127.0.0.1:2222
+      - -target
+      - ${TARGET:-127.0.0.1:22}
+    ports:
+      # host:container. The container binds loopback, so publish explicitly.
+      - "127.0.0.1:18080:18080"   # /fwd/<secret> and /shell/ -- proxy this over TLS
+      - "127.0.0.1:2222:2222"     # forwarded TCP -- reach it with: ssh -p 2222 localhost
+    volumes:
+      # Read-only and never passed as an env var, so the secret does not
+      # show up in `docker inspect` output or in the process environment of
+      # anything that can read /proc.
+      - ./server.env:/run/secrets/muse-proxy.env:ro
+    restart: unless-stopped
+    # The image already runs as uid 10001 and needs no privileges at all.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      # Liveness only: is the HTTP server accepting connections? There is no
+      # /healthz endpoint, and adding one would be a second unauthenticated
+      # surface on a server whose only auth is the tunnel secret. `nc -z`
+      # is in busybox, which is what the alpine base gives us.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 18080"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

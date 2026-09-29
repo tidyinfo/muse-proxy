@@ -34,7 +34,7 @@ listening socket.
 
 ```bash
 make fmt vet test          # or: gofmt -l . ; go vet ./... ; go test -race ./...
-git grep -InE '/home/[a-z]+|192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|127\.0\.0\.1:[0-9]{4,}' -- \
+git grep -InE '/home/[a-z]+|192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+' -- \
   ':!go.sum' ':!LICENSE' ':!RESEARCH.md'
 ```
 
@@ -54,6 +54,13 @@ Documentation examples use addresses from `198.18.0.0/15` (RFC 2544
 benchmarking), never `10.x`, never a real public IP. That range is reserved
 and never routable, so an example cannot be mistaken for a live host — and it
 keeps the leak check above from crying wolf on every doc.
+
+The check deliberately does **not** match `127.0.0.1:<port>`. Every default
+in this project is a loopback address with a port (`127.0.0.1:18080`,
+`127.0.0.1:2222`, `127.0.0.1:22`), and they appear in the README, the
+nginx snippet, the systemd units, `docker-compose.yml` and the flag
+definitions. Matching them made the check report eleven findings on a clean
+tree, which is the fastest way to teach people to ignore it.
 
 **If something sensitive is ever committed, rewriting history is the only fix.**
 GitHub keeps unreachable objects reachable through the fork network and cached

@@ -18,6 +18,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `docs/UDP_FORWARDING.md`.
 
 ### Added
+- **Bearer header authentication.** The server accepts the client secret as
+  `Authorization: Bearer <secret>` in addition to the URL path, and the
+  client sends it when `-secret-file` names a file containing `FWD_SECRET=`.
+  Either carrier is sufficient and both comparisons always run. This is
+  additive: the path form is unchanged and remains the default, because a
+  reverse proxy can disable access logging per-location without inspecting
+  headers. It exists for deployments where the secret should never be part
+  of a URL. See `docs/SECURITY.md`.
+- `docker-compose.yml` for the server, plus `deploy/server.env.example`.
+  Loopback-bound published ports, read-only root filesystem, all capabilities
+  dropped, secret mounted read-only rather than passed as an environment
+  variable.
 - `muse-proxy-client`: dials `wss://host/fwd/<secret>`, multiplexes TCP
   streams to allowlisted local targets, auto-reconnect with backoff,
   keepalive PING/PONG.

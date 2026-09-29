@@ -121,7 +121,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) handleFwd(w http.ResponseWriter, r *http.Request) {
 	got := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/fwd/"), "/", 2)[0]
-	if got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(s.cfg.Secret)) != 1 {
+	if !s.secretOK(got, bearer(r)) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -132,6 +132,28 @@ func (s *Server) handleFwd(w http.ResponseWriter, r *http.Request) {
 	s.log.Printf("client connected from %s (muse-proxy wire protocol v%d)", r.RemoteAddr, proto.Version)
 	s.attach(c)
 	s.log.Printf("client disconnected")
+}
+
+// bearer returns the token from an `Authorization: Bearer` header, or "".
+func bearer(r *http.Request) string {
+	const p = "Bearer "
+	h := r.Header.Get("Authorization")
+	if len(h) > len(p) && strings.EqualFold(h[:len(p)], p) {
+		return strings.TrimSpace(h[len(p):])
+	}
+	return ""
+}
+
+// secretOK reports whether either carrier holds the configured secret.
+//
+// The two are alternative carriers for the same value, not a hierarchy, so
+// either one matching is sufficient and there is no precedence to reason
+// about. Both comparisons are evaluated before the result is combined, so
+// neither branch can be skipped by the other's outcome.
+func (s *Server) secretOK(path, header string) bool {
+	okPath := subtle.ConstantTimeCompare([]byte(path), []byte(s.cfg.Secret)) == 1
+	okHeader := subtle.ConstantTimeCompare([]byte(header), []byte(s.cfg.Secret)) == 1
+	return okPath || okHeader
 }
 
 // handleShellPage serves the embedded web terminal. Put authentication in
@@ -147,7 +169,7 @@ func (s *Server) handleShellPage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleShellWS(w http.ResponseWriter, r *http.Request) {
 	got := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/shell/ws/"), "/", 2)[0]
-	if got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(s.cfg.Secret)) != 1 {
+	if !s.secretOK(got, bearer(r)) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
