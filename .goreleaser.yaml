@@ -151,10 +151,20 @@ nfpms: []
 # ARTIFACT arg meant reproducing the archives name_template in a second
 # place, and they drift.
 dockers_v2:
-  - id: server-amd64
+  # One entry, both platforms. dockers_v2 creates and publishes the
+  # multi-platform manifest itself, so there is no `docker_manifests` block --
+  # that key belongs to the legacy `dockers` pipeline, and configuring both is
+  # what the first two v0.1.0 attempts died on at publish time.
+  #
+  # Because this is one entry with two platforms, the tags carry no platform
+  # suffix: `0.1.0` and `latest` are each a single multi-arch manifest. That is
+  # what makes `ghcr.io/tidyinfo/muse-proxy:latest` in docker-compose.yml an
+  # image that actually exists. The previous per-platform split could only
+  # produce `latest-amd64` and `latest-arm64`.
+  - id: server
     ids: [server]
     dockerfile: Dockerfile.release
-    platforms: [linux/amd64]
+    platforms: [linux/amd64, linux/arm64]
     images:
       - ghcr.io/tidyinfo/muse-proxy
     tags:
@@ -167,33 +177,6 @@ dockers_v2:
       org.opencontainers.image.revision: "{{ .FullCommit }}"
       org.opencontainers.image.source: https://github.com/tidyinfo/muse-proxy
       org.opencontainers.image.licenses: MIT
-
-  - id: server-arm64
-    ids: [server]
-    dockerfile: Dockerfile.release
-    platforms: [linux/arm64]
-    images:
-      - ghcr.io/tidyinfo/muse-proxy
-    tags:
-      - "{{ .Version }}"
-      - "latest"
-    labels:
-      org.opencontainers.image.title: muse-proxy
-      org.opencontainers.image.description: Reverse TCP tunnel over egress-only WebSocket
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.revision: "{{ .FullCommit }}"
-      org.opencontainers.image.source: https://github.com/tidyinfo/muse-proxy
-      org.opencontainers.image.licenses: MIT
-
-docker_manifests:
-  - name_template: ghcr.io/tidyinfo/muse-proxy:{{ .Version }}
-    image_templates:
-      - ghcr.io/tidyinfo/muse-proxy:{{ .Version }}-amd64
-      - ghcr.io/tidyinfo/muse-proxy:{{ .Version }}-arm64
-  - name_template: ghcr.io/tidyinfo/muse-proxy:latest
-    image_templates:
-      - ghcr.io/tidyinfo/muse-proxy:latest-amd64
-      - ghcr.io/tidyinfo/muse-proxy:latest-arm64
 
 changelog:
   sort: asc
