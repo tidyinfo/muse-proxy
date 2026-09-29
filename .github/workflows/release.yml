@@ -50,11 +50,23 @@ jobs:
           version: "~> v2"
           install-only: true
 
-      # One goreleaser run does everything: binaries, archives, checksums, the
-      # GitHub Release, and the container images. Splitting the image into a
-      # second job would mean running the release pipeline twice, and the
-      # second run would fight the first over the same release.
-      - name: build, sign, publish
+      # Two goreleaser runs, deliberately. The first assembles everything and
+      # publishes nothing; the second publishes. goreleaser has no `continue`
+      # subcommand in v2, so the split is done with --skip=publish.
+      #
+      # This is not ceremony. It means a broken image build cannot leave a
+      # half-published release or a set of orphaned tags in ghcr.io, and --
+      # the reason it exists -- when a release does fail, the step that
+      # failed says which half broke, without needing read access to the
+      # job log. Two ~40s runs on a tag push is a cheap price.
+      - name: build everything, publish nothing
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          args: release --clean --skip=publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: publish images and the GitHub release
         uses: goreleaser/goreleaser-action@v7
         with:
           args: release --clean
