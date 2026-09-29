@@ -1,5 +1,9 @@
 # --- build output ---
 /bin/
+# goreleaser's output directory. Anchored: a bare "dist/" would also swallow
+# any legitimately named dist/ subdirectory. This one was missed once and
+# shipped 19 build artifacts to a public repo.
+/dist/
 *.exe
 *.exe~
 *.dll
