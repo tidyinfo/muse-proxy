@@ -8,18 +8,31 @@
 # for every image. Do not rebuild the program in here: the point of this
 # Dockerfile is to package the artifact CI already produced and signed.
 #
-# For building from source instead (development, or a modified tree), use the
-# inline form in the README's Container section.
-FROM alpine:3.20
-
-ARG TARGETPLATFORM
+# The two-stage shape is load-bearing, not decoration. `apk add` has to run
+# somewhere, and a plain `RUN` in the final stage executes the *target*
+# architecture's shell -- so the arm64 image only builds if QEMU binfmt is
+# registered on the builder. Running it in a $BUILDPLATFORM stage and copying
+# the finished files across means the only executed code is native, which
+# makes the cross build work without emulation, faster, and identically on any
+# machine. The alternative failed a real release on exactly this line.
+FROM --platform=$BUILDPLATFORM alpine:3.20 AS fetch
 
 RUN apk add --no-cache ca-certificates tzdata \
  && adduser -D -u 10001 muse
 
+FROM alpine:3.20
+
+ARG TARGETPLATFORM
+
+# Copied rather than installed in this stage -- see above. These are the only
+# two things the apk run above produced that the runtime actually needs.
+COPY --from=fetch /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=fetch /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=fetch /etc/passwd /etc/passwd
+
 COPY $TARGETPLATFORM/muse-proxy-server /usr/local/bin/muse-proxy-server
 
-USER muse
+USER 10001
 WORKDIR /tmp
 
 # Loopback only by default: binding anything wider is the operator's explicit
