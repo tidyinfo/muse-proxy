@@ -1,4 +1,4 @@
-# Test-only. Deliberately kept apart from the release workflow so that the job
+# Test-only. Deliberately kept apart from the release workflow so the job
 # with write permissions is never triggered by a pull request.
 name: ci
 
@@ -11,23 +11,23 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+  # The client is Linux-only (it allocates a pty through /dev/ptmx and the
+  # Linux-specific TIOCGPTN/TIOCSPTLCK ioctls), so `go vet ./...` and
+  # `go test ./...` cannot run on macOS or Windows -- they type-check every
+  # package, including the one that does not build there. The full gate
+  # therefore runs on Linux, and the portable half of the module is checked
+  # on the other two.
+  linux:
+    name: test (linux, full module)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
       - uses: actions/setup-go@v7
         with:
-          # The server is pure net/http and the test suite does not open a pty,
-          # so the suite runs everywhere. This is what catches a portability
-          # regression in internal/ before it reaches a release artifact.
           go-version-file: go.mod
 
       - name: gofmt
+        shell: bash
         run: test -z "$(gofmt -l .)"
 
       - name: vet
@@ -36,52 +36,56 @@ jobs:
       - name: test
         run: go test -race -count=1 ./...
 
-  # The client is Linux-only (see README platform table). Build it for every
-  # supported architecture on every push, so a broken cross-build is caught
-  # here rather than at release time.
-  client-matrix:
-    runs-on: ubuntu-latest
+  portable:
+    name: test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { goos: linux, goarch: amd64 }
-          - { goos: linux, goarch: arm64 }
-          - { goos: linux, goarch: arm, goarm: "7" }
+          - { name: darwin, os: macos-latest }
+          - { name: windows, os: windows-latest }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - name: build client
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          GOARM: ${{ matrix.goarm }}
-          CGO_ENABLED: "0"
-        run: go build -trimpath -o /dev/null ./cmd/muse-proxy-client
 
-  server-matrix:
+      # gofmt is byte-identical across platforms; running it only on Linux is
+      # enough and avoids a PowerShell-vs-bash quoting trap in this step.
+      - name: vet the packages that build here
+        run: go vet ./internal/proto/... ./internal/server/...
+
+      - name: test the packages that build here
+        run: go test -race -count=1 ./internal/proto/... ./internal/server/...
+
+  # Build every target that is actually shipped, on every push, so a broken
+  # cross-build fails here rather than at release time.
+  cross-build:
+    name: build ${{ matrix.component }} ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { goos: linux, goarch: amd64 }
-          - { goos: linux, goarch: arm64 }
-          - { goos: linux, goarch: arm, goarm: "7" }
-          - { goos: darwin, goarch: amd64 }
-          - { goos: darwin, goarch: arm64 }
-          - { goos: windows, goarch: amd64 }
+          - { component: client, goos: linux,   goarch: amd64, goarm: "" }
+          - { component: client, goos: linux,   goarch: arm64, goarm: "" }
+          - { component: client, goos: linux,   goarch: arm,   goarm: "7" }
+          - { component: server, goos: linux,   goarch: amd64, goarm: "" }
+          - { component: server, goos: linux,   goarch: arm64, goarm: "" }
+          - { component: server, goos: linux,   goarch: arm,   goarm: "7" }
+          - { component: server, goos: darwin,  goarch: amd64, goarm: "" }
+          - { component: server, goos: darwin,  goarch: arm64, goarm: "" }
+          - { component: server, goos: windows, goarch: amd64, goarm: "" }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - name: build server
+      - name: build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: "0"
-        run: go build -trimpath -o /dev/null ./cmd/muse-proxy-server
+        run: go build -trimpath -o /dev/null ./cmd/muse-proxy-${{ matrix.component }}
