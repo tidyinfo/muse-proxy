@@ -45,9 +45,15 @@ which is why the check runs against history too when you rewrite:
 
 ```bash
 git rev-list --all | while read c; do
-  git grep -IlE '/home/[a-z]+|REDACTED' "$c" -- 2>/dev/null
+  git grep -IlE '/home/[a-z]+|\b10\.[0-9]+\.[0-9]+\.[0-9]+' "$c" \
+    -- ':!RESEARCH.md' 2>/dev/null
 done
 ```
+
+Documentation examples use addresses from `198.18.0.0/15` (RFC 2544
+benchmarking), never `10.x`, never a real public IP. That range is reserved
+and never routable, so an example cannot be mistaken for a live host — and it
+keeps the leak check above from crying wolf on every doc.
 
 **If something sensitive is ever committed, rewriting history is the only fix.**
 GitHub keeps unreachable objects reachable through the fork network and cached
