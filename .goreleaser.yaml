@@ -85,7 +85,12 @@ checksum:
 # for a project with a single direct dependency.
 
 release:
-  draft: true
+  # Not a draft. A draft is invisible to the public API and can only be
+  # published from a browser, which means an unattended tag push produces a
+  # release nobody can see or download -- and the container image is already
+  # public at that point, so the release being hidden is not a safety
+  # property, just an incomplete one.
+  draft: false
   prerelease: auto
   footer: |
     ## Which archives you need
