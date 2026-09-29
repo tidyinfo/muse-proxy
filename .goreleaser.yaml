@@ -144,6 +144,12 @@ nfpms: []
 # The image is built from the release binary, not from source, so the image
 # and the tarball are the same artifact of the same commit rather than two
 # independent builds that could drift.
+#
+# No build_args here: goreleaser lays the build context out by target
+# platform (linux/amd64/muse-proxy-server) and buildx fills in
+# TARGETPLATFORM, which is what Dockerfile.release copies from. Adding an
+# ARTIFACT arg meant reproducing the archives name_template in a second
+# place, and they drift.
 dockers_v2:
   - id: server-amd64
     ids: [server]
@@ -152,8 +158,8 @@ dockers_v2:
     images:
       - ghcr.io/tidyinfo/muse-proxy
     tags:
-      - "{{ .Version }}-amd64"
-      - "latest-amd64"
+      - "{{ .Version }}"
+      - "latest"
     labels:
       org.opencontainers.image.title: muse-proxy
       org.opencontainers.image.description: Reverse TCP tunnel over egress-only WebSocket
@@ -169,8 +175,8 @@ dockers_v2:
     images:
       - ghcr.io/tidyinfo/muse-proxy
     tags:
-      - "{{ .Version }}-arm64"
-      - "latest-arm64"
+      - "{{ .Version }}"
+      - "latest"
     labels:
       org.opencontainers.image.title: muse-proxy
       org.opencontainers.image.description: Reverse TCP tunnel over egress-only WebSocket

@@ -2,15 +2,22 @@
 # and the tarball are the same artifact of the same commit rather than two
 # independent builds that could drift.
 #
+# goreleaser hands the build context over laid out by target platform
+# (linux/amd64/muse-proxy-server, linux/arm64/muse-proxy-server, ...) and
+# buildx populates TARGETPLATFORM automatically, so the copy is the same line
+# for every image. Do not rebuild the program in here: the point of this
+# Dockerfile is to package the artifact CI already produced and signed.
+#
 # For building from source instead (development, or a modified tree), use the
 # inline form in the README's Container section.
-ARG ARTIFACT
 FROM alpine:3.20
+
+ARG TARGETPLATFORM
 
 RUN apk add --no-cache ca-certificates tzdata \
  && adduser -D -u 10001 muse
 
-COPY ${ARTIFACT} /usr/local/bin/muse-proxy-server
+COPY $TARGETPLATFORM/muse-proxy-server /usr/local/bin/muse-proxy-server
 
 USER muse
 WORKDIR /tmp

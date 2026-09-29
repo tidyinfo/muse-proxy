@@ -15,9 +15,10 @@ permissions:
 jobs:
   release:
     permissions:
-      contents: write   # create the GitHub Release and upload assets
-      packages: write   # push the ghcr.io image
-      id-token: write   # OIDC token for keyless cosign (no signing keys held)
+      contents: write      # create the GitHub Release and upload assets
+      packages: write      # push the ghcr.io image
+      id-token: write      # OIDC token for keyless cosign (no signing keys held)
+      attestations: write  # store the SLSA provenance attestation
 
     runs-on: ubuntu-latest
     steps:
@@ -63,6 +64,12 @@ jobs:
       # Keyless signing. The key lives in Sigstore/Fulcio and is bound to this
       # workflow's identity through OIDC, so there is nothing to store, rotate
       # or leak here. What it does NOT cover is listed in MAINTAINERS.md.
+      #
+      # cosign is not on the runner image -- it used to be, and silently
+      # stopped being. Without this step the job dies with "cosign: command
+      # not found" after the release is already published.
+      - uses: sigstore/cosign-installer@v3
+
       - name: sign every artifact (keyless)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -70,6 +77,8 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           artifacts=(dist/*.tar.gz dist/*.zip)
+          certs=(dist/*.pem)
+          sigs=(dist/*.sig)
           if [ ${#artifacts[@]} -eq 0 ]; then
             echo "no artifacts to sign" >&2
             exit 1
@@ -81,7 +90,11 @@ jobs:
               --output-signature "${f}.sig" \
               "${f}"
           done
-          gh release upload "${GITHUB_REF_NAME}" "${artifacts[@]}"/*.pem "${artifacts[@]}"/*.sig --clobber
+          # Separate arrays, not "${artifacts[@]}/*.pem": a quoted array
+          # expands to its elements, and globs only apply to the last word,
+          # so that form would pass the archives themselves a second time.
+          gh release upload "${GITHUB_REF_NAME}" \
+            "${artifacts[@]}" "${certs[@]}" "${sigs[@]}" --clobber
 
       # SLSA provenance: a signed statement of "built by this workflow from
       # this commit", verifiable without trusting the release page's prose.
