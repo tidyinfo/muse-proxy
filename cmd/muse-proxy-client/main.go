@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -16,6 +17,16 @@ import (
 	"time"
 
 	"muse-proxy/internal/client"
+)
+
+// Build stamps, set by the release ldflags in .goreleaser.yaml. They must
+// exist as package-level vars or `-X` silently does nothing: the linker
+// ignores a -X naming a symbol the package never declared, and the release
+// ships unversioned binaries with no error anywhere.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func readURLFile(path string) string {
@@ -56,7 +67,13 @@ func main() {
 	proxyFlag := flag.String("proxy", "", "http proxy url for CONNECT, e.g. http://user:pass@host:3128")
 	pingInterval := flag.Duration("ping-interval", 25*time.Second, "websocket keepalive ping interval")
 	disableShell := flag.Bool("disable-shell", false, "refuse OPEN_SHELL requests (no pty sessions); the TCP allowlist is unaffected")
+	versionFlag := flag.Bool("version", false, "print build version and exit")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("%s %s (commit %s, built %s)\n", "muse-proxy-client", version, commit, date)
+		return
+	}
 
 	urlVal := *urlFlag
 	var secretVal string

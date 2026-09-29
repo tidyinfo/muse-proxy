@@ -109,6 +109,18 @@ v1 and v2 were additive, so skew costs features rather than the connection.
 **Any future breaking framing change must bump `proto.Version`, be called out
 in the changelog as breaking, and tell operators to upgrade the server last.**
 
+That is the *wire protocol* version. The *build* version is separate — both
+binaries take `-version`:
+
+```bash
+muse-proxy-client -version
+# muse-proxy-client 0.1.0 (commit 523c588, built 2026-09-29T19:53:41Z)
+```
+
+Ask for this line in any bug report. It is stamped by the release ldflags, so
+it names the exact commit a binary came from, which `-version` on a
+locally-built binary will not (`dev`).
+
 ## Answering issues
 
 Most reports will be one of these, and all of them are known:
