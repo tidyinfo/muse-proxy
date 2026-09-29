@@ -71,7 +71,11 @@ ssh -J user@server -p 2222 user@127.0.0.1   # via jump host
   becoming an open proxy.
 - The server should listen on loopback only; expose further access via your
   own jump host / firewall rules.
-- Details and threat model: `docs/SECURITY.md`.
+- **`/shell/` needs a second authentication layer.** The `<secret>` on that
+  page authenticates the *client tunnel*, not the human in front of the
+  browser. Reverse-proxy it behind basic auth, mTLS or SSO before exposing
+  it, or anyone who reaches the page and knows the secret gets a shell.
+  Details and threat model: `docs/SECURITY.md`.
 
 ## Roadmap
 
