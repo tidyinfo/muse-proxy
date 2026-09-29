@@ -40,3 +40,12 @@ func Decode(msg []byte) (typ byte, id uint32, payload []byte, ok bool) {
 	id = uint32(msg[1])<<24 | uint32(msg[2])<<16 | uint32(msg[3])<<8 | uint32(msg[4])
 	return typ, id, msg[HeaderLen:], true
 }
+
+// Version is the wire protocol version this build implements. It is bumped
+// only for incompatible framing changes; v1 and v2 are additive, so a peer
+// speaking an older version still interoperates.
+//
+// There is no negotiation on the wire — a mismatched pair is detected by
+// reading the startup logs on each side, which is why both binaries print
+// this on connect. See PROTOCOL.md, "Version skew".
+const Version = 2

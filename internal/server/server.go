@@ -129,7 +129,7 @@ func (s *Server) handleFwd(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	s.log.Printf("client connected from %s", r.RemoteAddr)
+	s.log.Printf("client connected from %s (muse-proxy wire protocol v%d)", r.RemoteAddr, proto.Version)
 	s.attach(c)
 	s.log.Printf("client disconnected")
 }

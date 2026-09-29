@@ -303,7 +303,7 @@ func Run(ctx context.Context, cfg Config) {
 			backoff = min(backoff*2, maxBackoff)
 			continue
 		}
-		log.Print("websocket connected")
+		log.Printf("websocket connected (muse-proxy wire protocol v%d)", proto.Version)
 		backoff = 5 * time.Second
 		f := &forwarder{
 			conn:       c,

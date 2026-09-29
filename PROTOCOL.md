@@ -117,6 +117,34 @@ handshake is an explicit takeover, not a rejection:
   stream should treat the stream as dead and reconnect; it must not attempt
   to resume it.
 
+## Version skew
+
+The client and the server are deployed independently and are often upgraded at
+different times. **There is no version negotiation on the wire** — a v0.1.0
+client and a v0.2.0 server that changed the framing will not detect the
+mismatch, and the symptom is streams that open and then die seconds later with
+no useful error.
+
+What makes it survivable: v1 and v2 were both additive. New frame types use
+previously reserved bytes and receivers ignore unknown types, so a v2 peer
+talking to a v1 peer loses only the features v2 added — the connection and
+TCP forwarding keep working. A future *breaking* change would break that, and
+the release notes must say so loudly when one happens.
+
+The practical check, and the reason both binaries print their version on
+connect:
+
+```bash
+# server log
+client connected from 198.18.0.7:54321 (muse-proxy wire protocol v2)
+# client log
+websocket connected (muse-proxy wire protocol v2)
+```
+
+Mismatched numbers there explain a class of bug reports that has no other
+symptom. Keep the two ends in step when upgrading, and upgrade the server
+last so an old client keeps working throughout.
+
 ## Operational notes
 
 - The secret appears in the request path: disable access logging for the

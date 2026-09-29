@@ -65,6 +65,22 @@ force-push, and ask people who cloned to re-clone.
   way; `-s -w` only drops DWARF, which matters solely to an interactive
   debugger attached to a running process. Verified, not assumed.
 
+## Version skew between the two binaries
+
+The client and server are upgraded independently, and **the wire protocol has
+no version handshake**. A mismatched pair does not fail cleanly — streams open
+and die seconds later. Both binaries log their version on connect; if an issue
+looks like unexplained stream churn, compare those two lines first:
+
+```
+client connected from 198.18.0.7:54321 (muse-proxy wire protocol v2)
+websocket connected (muse-proxy wire protocol v2)
+```
+
+v1 and v2 were additive, so skew costs features rather than the connection.
+**Any future breaking framing change must bump `proto.Version`, be called out
+in the changelog as breaking, and tell operators to upgrade the server last.**
+
 ## Answering issues
 
 Most reports will be one of these, and all of them are known:
@@ -77,6 +93,8 @@ Most reports will be one of these, and all of them are known:
   so confusing.
 - **"Doesn't run on my Mac/Windows."** The client is Linux-only. The table in
   `README.md` says so; point them at it rather than re-explaining.
+- **"Streams open then die after a few seconds."** Compare the wire-protocol
+  version both ends log on connect. See "Version skew" above.
 - **"Antivirus quarantined it."** A binary that opens `/dev/ptmx`, spawns a
   shell and bridges loopback TCP over a WebSocket matches the heuristic
   signature of a C2 agent. It is a false positive. `checksums.txt` and the

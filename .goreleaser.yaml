@@ -48,6 +48,10 @@ builds:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
 archives:
+  # Two archive blocks rather than one bundling both binaries: goreleaser
+  # refuses a single block whose platform set carries a different number of
+  # binaries, and Linux has both while macOS/Windows have only the server.
+  # The names make the pairing obvious, and the release notes say so.
   - id: server
     ids: [server]
     formats: [tar.gz]
@@ -59,6 +63,8 @@ archives:
     files:
       - LICENSE
       - README.md
+      - docs/SECURITY.md
+      - docs/DEPLOYMENT.md
 
   - id: client
     ids: [client]
@@ -68,6 +74,8 @@ archives:
     files:
       - LICENSE
       - README.md
+      - docs/SECURITY.md
+      - docs/DEPLOYMENT.md
 
 checksum:
   name_template: checksums.txt
@@ -80,11 +88,30 @@ release:
   draft: true
   prerelease: auto
   footer: |
+    ## Which archives you need
+
+    Two components ship separately and are usually needed **together**:
+
+    | file | runs on | role |
+    |---|---|---|
+    | `muse-proxy-client_*` | Linux only | runs on the host you want to reach into |
+    | `muse-proxy-server_*` | Linux, macOS, Windows | the public host they connect out to |
+
+    They must run the same protocol version; both log it on connect
+    (see `PROTOCOL.md`, "Version skew"). On macOS and Windows only the server
+    exists — the client is Linux-only because pty allocation uses
+    Linux-specific ioctls.
+
     ## Verifying the download
 
     ```bash
     sha256sum -c checksums.txt
     ```
+
+    That is enough for almost everyone. Each artifact also carries a keyless
+    cosign signature (`.sig`/`.pem`) and the release has an SLSA provenance
+    attestation, if you want to check that a binary came from this repository's
+    CI rather than from the download page.
 
     Every artifact above was built by GitHub Actions from the tagged commit by
     this repository's release workflow. To verify that independently rather
