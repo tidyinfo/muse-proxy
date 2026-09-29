@@ -71,12 +71,27 @@ force-push, and ask people who cloned to re-clone.
 
 - `git tag -a vX.Y.Z -m "..."` then push the tag; the release workflow builds
   and attaches the artifacts.
+- The workflow runs goreleaser **twice on purpose**: once with `--skip=publish`
+  to prove the whole build works, then again to publish. If a release fails,
+  the step that failed tells you which half broke — worth keeping, because
+  reading the log needs repo admin or a PAT, and step conclusions are visible
+  to anyone.
+- The release is **not** a draft. An unattended tag push cannot publish a
+  draft (that needs a browser), so a draft means a release nobody can see
+  while the container image is already public.
+- Never re-point a published tag. If a release is broken, cut `vX.Y.Z+1`; the
+  artifacts people already downloaded keep the old name, and rewriting the tag
+  silently invalidates every signature anyone has checked.
 - The client only builds for Linux. Do not add a Windows or macOS client job
   until `openPty` uses `posix_openpt` — see the platform table in `README.md`.
 - Artifacts are stripped on purpose. Go keeps its line table (`pclntab`) in the
   data section, so panic traces are fully symbolised with file and line either
   way; `-s -w` only drops DWARF, which matters solely to an interactive
   debugger attached to a running process. Verified, not assumed.
+- Images are built from a `$BUILDPLATFORM` stage so no target-architecture code
+  is ever executed. Keep it that way: putting `apk add` in the final stage
+  makes the arm64 build depend on QEMU being registered on whatever machine
+  runs the release.
 
 ## Version skew between the two binaries
 

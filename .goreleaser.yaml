@@ -120,15 +120,33 @@ release:
 
     Every artifact above was built by GitHub Actions from the tagged commit by
     this repository's release workflow. To verify that independently rather
-    than taking the release page's word for it, use the cosign signature and
-    the SLSA provenance attestation attached to this release:
+    than taking the release page's word for it, check the keyless signature
+    that sits next to each archive:
 
     ```bash
-    cosign verify-blob --bundle=muse-proxy-<component>_<version>_<os>_<arch>.tar.gz.bundle \
-      <artifact> \
-      --certificate-identity-regexp 'https://github\.com/.*/muse-proxy/\.github/workflows/release\.yml@.*' \
-      --certificate-oidc-issuer https://token.actions.githubusercontent.com
+    ARTIFACT=muse-proxy-server_0.1.0_linux_amd64.tar.gz   # or .zip on Windows
+    curl -LO "https://github.com/tidyinfo/muse-proxy/releases/download/v0.1.0/$ARTIFACT"
+    curl -LO "https://github.com/tidyinfo/muse-proxy/releases/download/v0.1.0/$ARTIFACT.sig"
+    curl -LO "https://github.com/tidyinfo/muse-proxy/releases/download/v0.1.0/$ARTIFACT.pem"
+
+    cosign verify-blob \
+      --signature "$ARTIFACT.sig" \
+      --certificate "$ARTIFACT.pem" \
+      --certificate-identity-regexp 'https://github\.com/tidyinfo/muse-proxy/\.github/workflows/release\.yml@.*' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      "$ARTIFACT"
     ```
+
+    That prints `Verified OK`. The identity regexp is what makes this worth
+    doing: it asserts the signature came from this repository's release
+    workflow on GitHub's OIDC issuer, not from somewhere that merely has a
+    cosign key.
+
+    cosign v3 prints a deprecation notice for `--signature`/`--certificate`
+    and points at `--bundle`. The v3 signer writes bundles, not the
+    separate `.sig`/`.pem` pair published here, so on cosign v3 expect those
+    two warnings and check the result is `Verified OK`. v2 verifies the same
+    files without comment.
 
     Or skip the binaries entirely and build from source — this is a pure Go
     module with no code generation step:
