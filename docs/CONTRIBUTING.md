@@ -2,14 +2,14 @@
 
 ## Ground rules
 
-- `master` is always releasable: CI (gofmt, `go vet`, `go test -race ./...`)
+- `main` is always releasable: CI (gofmt, `go vet`, `go test -race ./...`)
   must pass.
 - No secrets in the repo, ever: not in code, tests, docs, or examples.
   Test secrets like `"s3cret"` are fine; real ones are not.
 
 ## Workflow
 
-1. Fork, branch from `master` (`feat/...`, `fix/...`).
+1. Fork, branch from `main` (`feat/...`, `fix/...`).
 2. Keep `cmd/` thin: real logic lives in `internal/` packages and is unit
    tested. New protocol behavior needs a test in `internal/proto` and an
    update to `PROTOCOL.md` **in the same PR**.
