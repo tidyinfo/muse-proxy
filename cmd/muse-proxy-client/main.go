@@ -62,7 +62,10 @@ func readSecretFile(path string) string {
 func main() {
 	urlFlag := flag.String("url", "", "wss url, e.g. wss://host/fwd/<secret>")
 	urlFile := flag.String("url-file", "", "read wss url from a file (FWD_URL=... line); keeps the secret out of argv")
-	secretFile := flag.String("secret-file", "", "optional; read FWD_SECRET= from a file and send it as `Authorization: Bearer` instead of putting it in the URL path")
+	// No backquotes in any usage string: the flag package takes the first
+	// backquoted span as the value placeholder, so writing `Authorization:
+	// Bearer` here made -h print "-secret-file Authorization: Bearer".
+	secretFile := flag.String("secret-file", "", "optional; read FWD_SECRET= from a file and send it as an Authorization: Bearer header instead of putting it in the URL path")
 	allowFlag := flag.String("allow", "127.0.0.1:22", "comma-separated allowlisted local targets")
 	proxyFlag := flag.String("proxy", "", "http proxy url for CONNECT, e.g. http://user:pass@host:3128")
 	pingInterval := flag.Duration("ping-interval", 25*time.Second, "websocket keepalive ping interval")
