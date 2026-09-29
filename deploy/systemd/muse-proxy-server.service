@@ -1,0 +1,16 @@
+[Unit]
+Description=muse-proxy server (public host)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=muse-proxy
+# Secret file contains FWD_SECRET=<secret> or the raw secret, mode 600.
+ExecStart=/usr/local/bin/muse-proxy-server -secret-file /etc/muse-proxy/secret -http 127.0.0.1:18080 -tcp 127.0.0.1:2222 -target 127.0.0.1:22
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

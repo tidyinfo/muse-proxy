@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ["1.23", "1.24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+      - name: vet
+        run: go vet ./...
+      - name: test
+        run: go test -race -count=1 ./...
+      - name: build
+        run: go build ./...

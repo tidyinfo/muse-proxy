@@ -1,0 +1,47 @@
+# --- build output ---
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+
+# --- secrets and local config ---
+# Real secret files never belong here. *.example files are the tracked
+# templates, so the negation below is load-bearing, not decoration.
+*.env
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.asc
+*.gpg
+id_rsa*
+id_ed25519*
+*secret*
+# ...but keep the templates that ship with the repo:
+!*.env.example
+!*.example
+
+# --- runtime artifacts ---
+*.log
+*.pid
+*.sock
+logs/
+
+# --- editors / OS ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+\#*\#
+.\#*

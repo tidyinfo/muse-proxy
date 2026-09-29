@@ -1,0 +1,17 @@
+[Unit]
+Description=muse-proxy client (egress-only host)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=muse-proxy
+# The secret lives in the url file (FWD_URL=...), never in argv or env.
+ExecStart=/usr/local/bin/muse-proxy-client -url-file /etc/muse-proxy/fwd.env -allow 127.0.0.1:22
+# To refuse web-shell streams, add -disable-shell.
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

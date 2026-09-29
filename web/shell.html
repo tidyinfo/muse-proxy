@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>muse-proxy shell</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #eee;
+               font-family: system-ui, sans-serif; overflow: hidden; }
+  #term { height: 100%; display: none; }
+  #login { height: 100%; display: flex; align-items: center;
+           justify-content: center; }
+  #login form { display: flex; flex-direction: column; gap: 12px;
+                width: 280px; }
+  #login input { padding: 10px; font-size: 16px; background: #111;
+                 color: #eee; border: 1px solid #444; border-radius: 4px; }
+  #login button { padding: 10px; font-size: 16px; cursor: pointer; }
+  #login p { font-size: 13px; color: #888; margin: 0; }
+</style>
+</head>
+<body>
+<div id="login">
+  <form id="loginForm">
+    <p>muse-proxy shell — the secret is typed here, never put it in the
+    URL (it would leak into browser history and Referer headers).</p>
+    <input id="secret" type="password" placeholder="secret"
+           autocomplete="off" autofocus>
+    <button type="submit">Connect</button>
+  </form>
+</div>
+<div id="term"></div>
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script>
+"use strict";
+// muse-proxy web shell (protocol v2).
+// Page -> server: wss://host/shell/ws/<secret>
+//   OPEN_SHELL (0x06) id=1 payload {"cols":N,"rows":M}
+//   DATA       (0x02) id=1 payload keystrokes
+//   WINCH      (0x07) id=1 payload "COLSxROWS"
+//   CLOSE      (0x03) id=1
+// Server bridges the stream to the client's pty (see PROTOCOL.md).
+//
+// The secret is entered in the form above and kept in a JS variable only;
+// it never appears in the page URL.
+
+document.getElementById("loginForm").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const secret = document.getElementById("secret").value;
+  document.getElementById("secret").value = ""; // don't linger in the DOM
+  if (!secret) return;
+  document.getElementById("login").style.display = "none";
+  document.getElementById("term").style.display = "block";
+  connect(secret);
+});
+
+function connect(secret) {
+  const term = new Terminal({ cursorBlink: true });
+  // xterm defaults to an 80x24 buffer, which is what pins the terminal to half
+  // the window. Size it from the viewport. These are first-pass guesses for
+  // before anything is rendered; the measurements below take over after that.
+  // TODO: -> upgrade path: xterm's fit addon, which measures the cell via
+  // canvas metrics rather than inferring it from the laid-out DOM.
+  const CELL_W = 9, CELL_H = 17;
+  const fit = () => {
+    // Row height is exact: a .xterm-rows line box is exactly one cell tall.
+    const line = document.querySelector(".xterm-rows > div");
+    const ch = (line && line.getBoundingClientRect().height) || CELL_H;
+    // Cell width cannot be read off a span -- a span is a styled run of text,
+    // not a character. Derive it instead: xterm lays the screen out at
+    // exactly term.cols cells wide.
+    const scr = document.querySelector(".xterm-screen");
+    const cw = (scr && term.cols > 0)
+      ? scr.getBoundingClientRect().width / term.cols
+      : CELL_W;
+    // No -1 slack: body has overflow:hidden, so a rounding overshoot is
+    // clipped rather than scrolled, and floor() already guarantees the last
+    // row cannot exceed the viewport. Subtracting here just left a dead band.
+    term.resize(Math.max(20, Math.floor(innerWidth / cw)),
+                Math.max(5, Math.floor(innerHeight / ch)));
+  };
+  term.open(document.getElementById("term"));
+  fit();
+  // The first fit runs before any row is rendered, so it can only use the
+  // guesses. Re-fit once real cells exist in the DOM to measure.
+  requestAnimationFrame(fit);
+
+  const ws = new WebSocket(
+    (location.protocol === "https:" ? "wss://" : "ws://") +
+    location.host + "/shell/ws/" + encodeURIComponent(secret)
+  );
+  ws.binaryType = "arraybuffer";
+
+  function frame(type, id, payload) {
+    const p = payload ? new TextEncoder().encode(payload) : new Uint8Array(0);
+    const buf = new Uint8Array(5 + p.length);
+    buf[0] = type;
+    new DataView(buf.buffer).setUint32(1, id);
+    buf.set(p, 5);
+    return buf;
+  }
+  function openShell() {
+    ws.send(frame(0x06, 1, JSON.stringify({ cols: term.cols, rows: term.rows })));
+  }
+  function sendWinch() {
+    ws.send(frame(0x07, 1, term.cols + "x" + term.rows));
+  }
+
+  ws.onopen = openShell;
+  ws.onclose = () => term.write("\r\n[connection closed]\r\n");
+  ws.onerror = () => term.write("\r\n[connection error]\r\n");
+  ws.onmessage = (ev) => {
+    const b = new Uint8Array(ev.data);
+    if (b.length < 5) return;
+    const type = b[0];
+    const id = new DataView(b.buffer).getUint32(1);
+    const payload = b.slice(5);
+    if (id !== 1) return;
+    if (type === 0x02) term.write(payload);          // DATA: pty output
+    else if (type === 0x03) ws.close();              // CLOSE
+  };
+
+  term.onData((data) => {
+    if (ws.readyState === WebSocket.OPEN)
+      ws.send(frame(0x02, 1, data));
+  });
+  term.onResize(({ cols, rows }) => {
+    if (ws.readyState === WebSocket.OPEN) sendWinch();
+  });
+  window.addEventListener("resize", fit);
+  term.focus();
+  term.write("connecting...\r\n");
+}
+</script>
+</body>
+</html>
