@@ -13,7 +13,8 @@
 2. Keep `cmd/` thin: real logic lives in `internal/` packages and is unit
    tested. New protocol behavior needs a test in `internal/proto` and an
    update to `PROTOCOL.md` **in the same PR**.
-3. Run `make fmt vet test` before pushing.
+3. Run `make fmt vet test` before pushing, and the leak check in
+   [`MAINTAINERS.md`](../MAINTAINERS.md#before-you-push).
 4. Update `CHANGELOG.md` under `[Unreleased]`.
 
 ## Protocol changes

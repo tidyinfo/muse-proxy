@@ -1,0 +1,8 @@
+# Keep the release archives byte-identical regardless of how a user's core.autocrlf
+# is configured; a checksum mismatch on a downloaded artifact is indistinguishable
+# from tampering.
+*.tar.gz   binary
+*.zip      binary
+*.pem      text eol=lf
+*.sig      binary
+*.sum      text eol=lf

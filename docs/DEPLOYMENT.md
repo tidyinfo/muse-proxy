@@ -54,9 +54,26 @@ The page loads xterm.js from a public CDN (`cdn.jsdelivr.net`). If the
 client's network cannot reach it, the page renders blank. Vendor the two
 files into the deployment (or a local mirror) if that matters.
 
+## Platform support
+
+The **client builds on Linux only** — it allocates a pty through `/dev/ptmx`
+with the Linux-specific `TIOCGPTN`/`TIOCSPTLCK` ioctls, which do not exist on
+macOS or Windows. The server has no such dependency and cross-compiles to any
+target.
+
+| | linux/amd64 | linux/arm64 | linux/arm (v7) | darwin/* | windows/* |
+|---|---|---|---|---|---|
+| `muse-proxy-server` | yes | yes | yes | yes | yes |
+| `muse-proxy-client` | yes | yes | yes | no | no |
+
+If the egress-restricted host is a Mac or a Windows box, run the client in a
+Linux container or VM on it and set `-allow` accordingly.
+
 ## Verification
 
 - Server log shows `client connected from ...`.
+- `muse-proxy-client -h` and `muse-proxy-server -h` both start on the target
+  host; a client that fails to build is the usual cause of a silent tunnel.
 - From the server: `ssh -p 2222 user@127.0.0.1` → lands on the client host.
 - `scp -P 2222 file user@127.0.0.1:/tmp/` works (independent stream).
 - With the web shell exposed: `GET /shell/` returns 401 without

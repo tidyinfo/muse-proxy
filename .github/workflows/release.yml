@@ -1,0 +1,91 @@
+# Release. Triggered only by a pushed v* tag, never by a pull request.
+# That separation is the entire reason this lives in its own file: if a PR
+# could reach a job with `contents: write`, anyone able to open a PR would be
+# one approval click away from publishing artifacts under this project's name.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+# Default to read-only. The job below opts into exactly what it needs.
+permissions:
+  contents: read
+
+jobs:
+  release:
+    permissions:
+      contents: write   # create the GitHub Release and upload assets
+      packages: write   # push the ghcr.io image
+      id-token: write   # OIDC token for keyless cosign (no signing keys held)
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # goreleaser needs tags and full history
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: unit tests
+        # Never publish artifacts from a tree that does not pass.
+        run: go test -race -count=1 ./...
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - name: log in to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: install goreleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          install-only: true
+
+      # One goreleaser run does everything: binaries, archives, checksums, the
+      # GitHub Release, and the container images. Splitting the image into a
+      # second job would mean running the release pipeline twice, and the
+      # second run would fight the first over the same release.
+      - name: build, sign, publish
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Keyless signing. The key lives in Sigstore/Fulcio and is bound to this
+      # workflow's identity through OIDC, so there is nothing to store, rotate
+      # or leak here. What it does NOT cover is listed in MAINTAINERS.md.
+      - name: sign every artifact (keyless)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          artifacts=(dist/*.tar.gz dist/*.zip)
+          if [ ${#artifacts[@]} -eq 0 ]; then
+            echo "no artifacts to sign" >&2
+            exit 1
+          fi
+          for f in "${artifacts[@]}"; do
+            echo "signing $f"
+            cosign sign-blob --yes \
+              --output-certificate "${f}.pem" \
+              --output-signature "${f}.sig" \
+              "${f}"
+          done
+          gh release upload "${GITHUB_REF_NAME}" "${artifacts[@]}"/*.pem "${artifacts[@]}"/*.sig --clobber
+
+      # SLSA provenance: a signed statement of "built by this workflow from
+      # this commit", verifiable without trusting the release page's prose.
+      - name: attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: "dist/*"

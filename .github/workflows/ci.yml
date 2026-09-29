@@ -1,25 +1,87 @@
+# Test-only. Deliberately kept apart from the release workflow so that the job
+# with write permissions is never triggered by a pull request.
 name: ci
 
 on:
   push:
+    branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  test:
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        go: ["1.23", "1.24"]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
         with:
-          go-version: ${{ matrix.go }}
+          # The server is pure net/http and the test suite does not open a pty,
+          # so the suite runs everywhere. This is what catches a portability
+          # regression in internal/ before it reaches a release artifact.
+          go-version-file: go.mod
+
       - name: gofmt
         run: test -z "$(gofmt -l .)"
+
       - name: vet
         run: go vet ./...
+
       - name: test
         run: go test -race -count=1 ./...
-      - name: build
-        run: go build ./...
+
+  # The client is Linux-only (see README platform table). Build it for every
+  # supported architecture on every push, so a broken cross-build is caught
+  # here rather than at release time.
+  client-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: linux, goarch: arm, goarm: "7" }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: build client
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: "0"
+        run: go build -trimpath -o /dev/null ./cmd/muse-proxy-client
+
+  server-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: linux, goarch: arm, goarm: "7" }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: build server
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: "0"
+        run: go build -trimpath -o /dev/null ./cmd/muse-proxy-server

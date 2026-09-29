@@ -39,12 +39,23 @@ allowlisted local target (e.g. `127.0.0.1:22`).
 - `web/` — browser terminal for the web-shell path.
 - `deploy/` — systemd units, nginx snippets, env examples.
 - `docs/` — `SECURITY.md`, `DEPLOYMENT.md`, `CONTRIBUTING.md`.
+- [`RESEARCH.md`](RESEARCH.md) — the network behaviour that motivated this.
+- [`MAINTAINERS.md`](MAINTAINERS.md) — how to carry the project forward.
 
 ## Protocol
 
 Versioned, framed binary messages over one WebSocket. v1 carries TCP
 streams; v2 adds the shell/pty frames. Full spec:
 [`PROTOCOL.md`](PROTOCOL.md).
+
+## Why this exists
+
+Some hosts cannot accept inbound connections at all. Not "firewall rules you
+can edit" — the packets never arrive, and no amount of server-side
+configuration changes that. If you have hit a machine where `ping` works, a
+port scan looks healthy, and `ssh` hangs with no error, read
+[`RESEARCH.md`](RESEARCH.md): the behaviour, the measurements that pin it
+down, and why port changes and L3 tunnels do not fix it.
 
 ## Quickstart (forwarding path)
 
@@ -63,6 +74,43 @@ ssh -p 2222 user@127.0.0.1        # on the server itself
 ssh -J user@server -p 2222 user@127.0.0.1   # via jump host
 ```
 
+## Install
+
+**Prebuilt binaries** — pick the archive for your platform from the
+[releases page](https://github.com/tidyinfo/muse-proxy/releases) and verify it:
+
+```bash
+sha256sum -c checksums.txt
+```
+
+The client is Linux-only; the server also builds for macOS and Windows. See the
+platform table below.
+
+**From source** — no build step, no toolchain surprises:
+
+```bash
+go install github.com/tidyinfo/muse-proxy/cmd/muse-proxy-server@latest
+go install github.com/tidyinfo/muse-proxy/cmd/muse-proxy-client@latest
+```
+
+**Container** — the server only:
+
+```bash
+docker run --rm -p 127.0.0.1:2222:2222 -p 127.0.0.1:18080:18080 \
+  -v /etc/muse-proxy:/etc/muse-proxy:ro \
+  ghcr.io/tidyinfo/muse-proxy:latest \
+  -secret-file /etc/muse-proxy/secret \
+  -http 0.0.0.0:18080 -tcp 0.0.0.0:2222 -target 127.0.0.1:22
+```
+
+Note the `-http 0.0.0.0` override: the defaults bind to loopback, which is
+correct on a host but unreachable from outside a container.
+
+Every release is built by GitHub Actions from the tagged commit, keyless-signed
+with cosign and carries an SLSA provenance attestation, so you can check where a
+binary came from rather than taking the release page's word for it. The exact
+`cosign verify-blob` invocation is in the release notes.
+
 ## Security model (summary)
 
 - The secret is a bearer token in the URL path: treat it like a password,
@@ -77,12 +125,27 @@ ssh -J user@server -p 2222 user@127.0.0.1   # via jump host
   it, or anyone who reaches the page and knows the secret gets a shell.
   Details and threat model: `docs/SECURITY.md`.
 
+## Platform support
+
+| | linux/amd64 | linux/arm64 | linux/arm (v7) | darwin/* | windows/* |
+|---|---|---|---|---|---|
+| `muse-proxy-server` | yes | yes | yes | yes | yes |
+| `muse-proxy-client` | yes | yes | yes | **no** | **no** |
+
+The **client is Linux-only**: it allocates a pty via `/dev/ptmx` and
+`TIOCGPTN`/`TIOCSPTLCK`, which are Linux-specific ioctls. On macOS and
+Windows, run the client on a Linux host (a container or VM is fine) and point
+`-allow` at the service you actually want to reach. The server is pure
+net/http and cross-compiles anywhere.
+
 ## Roadmap
 
 - v1: TCP forwarding (implemented, tested)
 - v2: web shell — pty sessions over the same multiplexed connection
   (implemented, tested; page at `/shell/`)
+- next: pty allocation via `posix_openpt` so the client builds on macOS
 - later: per-stream ACLs, audit logging
+- planned: Homebrew tap, Nix flake
 
 ## License
 

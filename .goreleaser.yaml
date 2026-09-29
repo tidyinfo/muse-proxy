@@ -1,0 +1,173 @@
+# goreleaser config. v2 schema.
+# Docs: https://goreleaser.com/customization/
+version: 2
+
+project_name: muse-proxy
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  # The server has no OS-specific code and cross-compiles anywhere.
+  - id: server
+    main: ./cmd/muse-proxy-server
+    binary: muse-proxy-server
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    goarm: ["7"]
+    ignore:
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+    # -s -w drops DWARF only. Go keeps its line table in the data section, so
+    # panic traces stay fully symbolised with file and line either way.
+    # Verified, not assumed: see MAINTAINERS.md.
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+  # The client is Linux-only: it allocates a pty via /dev/ptmx and the
+  # Linux-specific TIOCGPTN/TIOCSPTLCK ioctls. darwin/windows builds would
+  # fail to compile, so they are not attempted here.
+  - id: client
+    main: ./cmd/muse-proxy-client
+    binary: muse-proxy-client
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64, arm]
+    goarm: ["7"]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+archives:
+  - id: server
+    ids: [server]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+
+  - id: client
+    ids: [client]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+# sboms is left off: it needs an external binary in CI and buys very little
+# for a project with a single direct dependency.
+
+release:
+  draft: true
+  prerelease: auto
+  footer: |
+    ## Verifying the download
+
+    ```bash
+    sha256sum -c checksums.txt
+    ```
+
+    Every artifact above was built by GitHub Actions from the tagged commit by
+    this repository's release workflow. To verify that independently rather
+    than taking the release page's word for it, use the cosign signature and
+    the SLSA provenance attestation attached to this release:
+
+    ```bash
+    cosign verify-blob --bundle=muse-proxy-<component>_<version>_<os>_<arch>.tar.gz.bundle \
+      <artifact> \
+      --certificate-identity-regexp 'https://github\.com/.*/muse-proxy/\.github/workflows/release\.yml@.*' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com
+    ```
+
+    Or skip the binaries entirely and build from source — this is a pure Go
+    module with no code generation step:
+
+    ```bash
+    go install github.com/tidyinfo/muse-proxy/cmd/muse-proxy-server@latest
+    ```
+
+nfpms: []
+
+# The container image is built from the release binary rather than from
+# source, so the image and the tarball are byte-identical artifacts of the
+# same commit rather than two independent builds that could drift.
+# dockers_v2 replaces the deprecated `dockers` key. Same shapes, different
+# names: platforms replaces goos/goarch, images replaces image_templates,
+# tags carries the version/latest variants, labels replaces the --label flags.
+#
+# The image is built from the release binary, not from source, so the image
+# and the tarball are the same artifact of the same commit rather than two
+# independent builds that could drift.
+dockers_v2:
+  - id: server-amd64
+    ids: [server]
+    dockerfile: Dockerfile.release
+    platforms: [linux/amd64]
+    images:
+      - ghcr.io/tidyinfo/muse-proxy
+    tags:
+      - "{{ .Version }}-amd64"
+      - "latest-amd64"
+    labels:
+      org.opencontainers.image.title: muse-proxy
+      org.opencontainers.image.description: Reverse TCP tunnel over egress-only WebSocket
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.source: https://github.com/tidyinfo/muse-proxy
+      org.opencontainers.image.licenses: MIT
+
+  - id: server-arm64
+    ids: [server]
+    dockerfile: Dockerfile.release
+    platforms: [linux/arm64]
+    images:
+      - ghcr.io/tidyinfo/muse-proxy
+    tags:
+      - "{{ .Version }}-arm64"
+      - "latest-arm64"
+    labels:
+      org.opencontainers.image.title: muse-proxy
+      org.opencontainers.image.description: Reverse TCP tunnel over egress-only WebSocket
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.source: https://github.com/tidyinfo/muse-proxy
+      org.opencontainers.image.licenses: MIT
+
+docker_manifests:
+  - name_template: ghcr.io/tidyinfo/muse-proxy:{{ .Version }}
+    image_templates:
+      - ghcr.io/tidyinfo/muse-proxy:{{ .Version }}-amd64
+      - ghcr.io/tidyinfo/muse-proxy:{{ .Version }}-arm64
+  - name_template: ghcr.io/tidyinfo/muse-proxy:latest
+    image_templates:
+      - ghcr.io/tidyinfo/muse-proxy:latest-amd64
+      - ghcr.io/tidyinfo/muse-proxy:latest-arm64
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
