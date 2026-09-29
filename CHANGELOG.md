@@ -53,6 +53,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   allowlist.
 
 ### Fixed
+- A mistyped `KEY=value` line in a `-secret-file` was silently accepted as the
+  raw secret, producing a server that answers 403 to everything with nothing in
+  the log to explain why. It is now rejected at startup with the offending line
+  quoted. (Found by writing the key wrong myself.)
+- Docs/infra no longer reference removed features. The systemd units and the
 - Docs/infra no longer reference removed features. The systemd units and the
   README quickstart told operators to pass flags that no longer exist
   (`-udp-allow`, `-wg-*`, `-listen`), so following them verbatim produced a

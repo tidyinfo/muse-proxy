@@ -29,6 +29,14 @@ func readSecretFile(path string) string {
 		if v, ok := strings.CutPrefix(line, "FWD_SECRET="); ok {
 			return strings.TrimSpace(v)
 		}
+		// A bare token is the other accepted form, but a bare token can
+		// never contain '=': a hex secret does not, and treating a
+		// mistyped key as the secret produces a server that answers 403 to
+		// everything with nothing in the log to explain why.
+		if strings.Contains(line, "=") {
+			log.Fatalf("%s: line %q looks like KEY=value but is not FWD_SECRET=; "+
+				"use a bare token or rename the key", path, line)
+		}
 		return line // raw secret
 	}
 	log.Fatalf("empty secret file %s", path)

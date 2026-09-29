@@ -57,6 +57,17 @@ port scan looks healthy, and `ssh` hangs with no error, read
 [`RESEARCH.md`](RESEARCH.md): the behaviour, the measurements that pin it
 down, and why port changes and L3 tunnels do not fix it.
 
+When SSH is not the thing you need, `/shell/` gives you a terminal on the
+egress-only host from any browser, over the same connection:
+
+![the web terminal on the egress-restricted host](docs/web-shell.png)
+
+The server bridges `wss://host/shell/ws/<secret>` to a pty the client spawns;
+xterm.js is embedded in the server binary, so there is nothing to install in
+the browser. The page takes the secret from a password field and never puts it
+in a URL. **Put your own authentication in front of it** — anyone who loads the
+page and knows the secret gets a shell (see below).
+
 ## Quickstart (forwarding path)
 
 ```bash
