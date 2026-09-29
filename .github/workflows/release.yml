@@ -89,8 +89,6 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           artifacts=(dist/*.tar.gz dist/*.zip)
-          certs=(dist/*.pem)
-          sigs=(dist/*.sig)
           if [ ${#artifacts[@]} -eq 0 ]; then
             echo "no artifacts to sign" >&2
             exit 1
@@ -102,9 +100,21 @@ jobs:
               --output-signature "${f}.sig" \
               "${f}"
           done
-          # Separate arrays, not "${artifacts[@]}/*.pem": a quoted array
-          # expands to its elements, and globs only apply to the last word,
-          # so that form would pass the archives themselves a second time.
+          # Expand these *after* the loop, not before. A glob is resolved when
+          # the array is assigned, so collecting them up front sees a dist/
+          # with no signatures in it yet and yields two empty arrays -- and
+          # `gh release upload` of the archives alone still exits 0, so the
+          # step goes green having signed nothing. That is exactly what the
+          # first v0.1.0 run did.
+          certs=(dist/*.pem)
+          sigs=(dist/*.sig)
+          want=$(( ${#artifacts[@]} * 2 ))
+          got=$(( ${#certs[@]} + ${#sigs[@]} ))
+          if [ "$got" -ne "$want" ]; then
+            echo "expected $want signature files for ${#artifacts[@]} artifacts, found $got" >&2
+            ls -la dist/ >&2
+            exit 1
+          fi
           gh release upload "${GITHUB_REF_NAME}" \
             "${artifacts[@]}" "${certs[@]}" "${sigs[@]}" --clobber
 
